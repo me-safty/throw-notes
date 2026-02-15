@@ -1,9 +1,9 @@
 import { Authenticated, AuthLoading, Unauthenticated } from "convex/react";
+import { Redirect } from "expo-router";
 import React from "react";
 import { ScrollView, Text, View } from "react-native";
 
 import { GoogleSignInCard } from "@/src/features/auth/google-sign-in-card";
-import { HomeScreen } from "@/src/features/home/home-screen";
 
 export default function IndexScreen() {
   return (
@@ -34,7 +34,7 @@ export default function IndexScreen() {
       </Unauthenticated>
 
       <Authenticated>
-        <HomeScreen />
+        <Redirect href="/(tabs)/(home)" />
       </Authenticated>
     </ScrollView>
   );

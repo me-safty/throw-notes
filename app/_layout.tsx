@@ -51,8 +51,19 @@ export default function RootLayout() {
   return (
     <ClerkProvider publishableKey={env.clerkPublishableKey} tokenCache={tokenCache}>
       <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
-        <Stack screenOptions={{ headerLargeTitle: true }}>
-          <Stack.Screen name="index" options={{ title: "Throw Notes" }} />
+        <Stack>
+          <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="note-modal"
+            options={{
+              title: "New Note",
+              presentation: "formSheet",
+              sheetGrabberVisible: true,
+              sheetAllowedDetents: [0.55, 1.0],
+              contentStyle: { backgroundColor: "transparent" },
+            }}
+          />
         </Stack>
       </ConvexProviderWithClerk>
     </ClerkProvider>
