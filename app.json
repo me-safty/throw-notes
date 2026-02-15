@@ -23,7 +23,10 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "runtimeVersion": {
+        "policy": "appVersion"
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -42,6 +45,9 @@
       "eas": {
         "projectId": "5a21e123-44af-49f4-bbbd-5eb824c823c5"
       }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/5a21e123-44af-49f4-bbbd-5eb824c823c5"
     }
   }
 }
