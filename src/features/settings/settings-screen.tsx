@@ -18,11 +18,13 @@ export function SettingsScreen() {
   const createSchedule = useMutation(api.schedules.create);
   const setScheduleEnabled = useMutation(api.schedules.setEnabled);
   const removeSchedule = useMutation(api.schedules.remove);
+  const triggerTestReminder = useMutation(api.schedules.triggerTestReminder);
 
   const { signOut } = useAuth();
 
   const [statusMessage, setStatusMessage] = React.useState<string | null>(null);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
+  const [isSendingTestReminder, setIsSendingTestReminder] = React.useState(false);
 
   const onCreateSchedule = React.useCallback(
     async ({ hour, minute, timezone }: { hour: number; minute: number; timezone: string }) => {
@@ -38,6 +40,22 @@ export function SettingsScreen() {
     },
     [createSchedule],
   );
+
+  const onTriggerTestReminder = React.useCallback(async () => {
+    try {
+      setErrorMessage(null);
+      setStatusMessage(null);
+      setIsSendingTestReminder(true);
+      await triggerTestReminder({});
+      setStatusMessage("Test reminder queued. You should get a push notification shortly.");
+    } catch (caughtError) {
+      setErrorMessage(
+        caughtError instanceof Error ? caughtError.message : "Unable to send test reminder.",
+      );
+    } finally {
+      setIsSendingTestReminder(false);
+    }
+  }, [triggerTestReminder]);
 
   return (
     <ScrollView
@@ -65,6 +83,30 @@ export function SettingsScreen() {
           }}
         >
           <Text style={{ color: "#0f172a", fontWeight: "700" }}>Sign Out</Text>
+        </Pressable>
+      </Card>
+
+      <Card>
+        <Text style={{ fontSize: 20, fontWeight: "700", color: "#0f172a" }}>Test Push</Text>
+        <Text selectable style={{ color: "#475569", lineHeight: 20 }}>
+          Trigger a test reminder now using your existing random note selection.
+        </Text>
+
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => void onTriggerTestReminder()}
+          disabled={isSendingTestReminder}
+          style={{
+            borderRadius: 12,
+            borderCurve: "continuous",
+            paddingVertical: 10,
+            alignItems: "center",
+            backgroundColor: isSendingTestReminder ? "#cbd5e1" : "#dbeafe",
+          }}
+        >
+          <Text style={{ color: "#1e3a8a", fontWeight: "700" }}>
+            {isSendingTestReminder ? "Sending..." : "Send Test Reminder"}
+          </Text>
         </Pressable>
       </Card>
 

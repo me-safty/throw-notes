@@ -1,5 +1,6 @@
 import { ConvexError, v } from "convex/values";
 
+import { internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
 import { requireUserId } from "./helpers/auth";
 import { assertValidTimezone, computeNextRunAtMs } from "./lib/time";
@@ -137,5 +138,35 @@ export const remove = mutation({
 
     await ctx.db.delete(args.scheduleId);
     return null;
+  },
+});
+
+export const triggerTestReminder = mutation({
+  args: {},
+  returns: v.id("reminderSchedules"),
+  handler: async (ctx) => {
+    const userId = await requireUserId(ctx);
+
+    const schedules = await ctx.db
+      .query("reminderSchedules")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+
+    const enabledSchedule = schedules
+      .filter((schedule) => schedule.enabled)
+      .sort((a, b) => a.nextRunAt - b.nextRunAt)[0];
+
+    if (!enabledSchedule) {
+      throw new ConvexError({
+        code: "NO_ENABLED_SCHEDULE",
+        message: "Enable at least one reminder time before sending a test reminder.",
+      });
+    }
+
+    await ctx.scheduler.runAfter(0, internal.reminders.deliverReminderForSchedule, {
+      scheduleId: enabledSchedule._id,
+    });
+
+    return enabledSchedule._id;
   },
 });
