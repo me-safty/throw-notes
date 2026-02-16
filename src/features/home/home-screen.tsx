@@ -1,9 +1,10 @@
 import { useAuth } from "@clerk/clerk-expo";
 import { useMutation, useQuery } from "convex/react";
 import React from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import { api } from "@/convex/_generated/api";
+import { type Id } from "@/convex/_generated/dataModel";
 import { Card } from "@/src/components/card";
 import { type NotePriority } from "@/src/features/notes/create-note-form";
 import { useRegisterPushToken } from "@/src/hooks/use-register-push-token";
@@ -33,11 +34,53 @@ export function HomeScreen() {
   const notes = useQuery(api.notes.list, {});
   const updateNote = useMutation(api.notes.update);
   const removeNote = useMutation(api.notes.remove);
+  const [editingNoteId, setEditingNoteId] = React.useState<Id<"notes"> | null>(null);
+  const [draftContent, setDraftContent] = React.useState("");
+  const [isSavingEdit, setIsSavingEdit] = React.useState(false);
+  const [editError, setEditError] = React.useState<string | null>(null);
 
   const { isSignedIn } = useAuth();
   const { registrationError } = useRegisterPushToken(Boolean(isSignedIn));
 
   const highPriorityCount = notes?.filter((note) => note.priority === "high").length ?? 0;
+  const startEditing = React.useCallback((noteId: Id<"notes">, content: string) => {
+    setEditingNoteId(noteId);
+    setDraftContent(content);
+    setEditError(null);
+  }, []);
+
+  const cancelEditing = React.useCallback(() => {
+    setEditingNoteId(null);
+    setDraftContent("");
+    setEditError(null);
+  }, []);
+
+  const saveEdit = React.useCallback(
+    async (noteId: Id<"notes">, priority: NotePriority) => {
+      const trimmedContent = draftContent.trim();
+
+      if (!trimmedContent || isSavingEdit) {
+        return;
+      }
+
+      try {
+        setIsSavingEdit(true);
+        setEditError(null);
+        await updateNote({
+          noteId,
+          content: trimmedContent,
+          priority,
+        });
+        setEditingNoteId(null);
+        setDraftContent("");
+      } catch (caughtError) {
+        setEditError(caughtError instanceof Error ? caughtError.message : "Could not update note.");
+      } finally {
+        setIsSavingEdit(false);
+      }
+    },
+    [draftContent, isSavingEdit, updateNote],
+  );
 
   return (
     <ScrollView
@@ -119,6 +162,11 @@ export function HomeScreen() {
 
       <Card>
         <Text style={{ fontSize: 20, fontWeight: "700", color: "#0f172a" }}>Notes</Text>
+        {editError ? (
+          <Text selectable style={{ color: "#b91c1c", lineHeight: 20 }}>
+            {editError}
+          </Text>
+        ) : null}
 
         {notes === undefined ? (
           <Text selectable style={{ color: "#64748b" }}>
@@ -132,6 +180,8 @@ export function HomeScreen() {
           <View style={{ gap: 12 }}>
             {notes.map((note) => {
               const colors = priorityPalette(note.priority);
+              const isEditing = editingNoteId === note._id;
+              const isSavingThisNote = isEditing && isSavingEdit;
 
               return (
                 <View
@@ -146,9 +196,30 @@ export function HomeScreen() {
                     gap: 10,
                   }}
                 >
-                  <Text selectable style={{ color: "#0f172a", fontSize: 16, lineHeight: 22 }}>
-                    {note.content}
-                  </Text>
+                  {isEditing ? (
+                    <TextInput
+                      multiline
+                      value={draftContent}
+                      onChangeText={setDraftContent}
+                      placeholder="Update your note"
+                      style={{
+                        minHeight: 96,
+                        borderRadius: 12,
+                        borderCurve: "continuous",
+                        borderWidth: 1,
+                        borderColor: "#cbd5e1",
+                        padding: 10,
+                        fontSize: 16,
+                        color: "#0f172a",
+                        textAlignVertical: "top",
+                        backgroundColor: "#ffffff",
+                      }}
+                    />
+                  ) : (
+                    <Text selectable style={{ color: "#0f172a", fontSize: 16, lineHeight: 22 }}>
+                      {note.content}
+                    </Text>
+                  )}
 
                   <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
                     {priorities.map((priority) => {
@@ -157,6 +228,7 @@ export function HomeScreen() {
                         <Pressable
                           key={priority}
                           accessibilityRole="button"
+                          disabled={isEditing}
                           onPress={() =>
                             void updateNote({
                               noteId: note._id,
@@ -170,6 +242,7 @@ export function HomeScreen() {
                             paddingHorizontal: 10,
                             paddingVertical: 6,
                             backgroundColor: isSelected ? colors.badge : "#e2e8f0",
+                            opacity: isEditing ? 0.55 : 1,
                           }}
                         >
                           <Text
@@ -197,8 +270,62 @@ export function HomeScreen() {
                     Sent {note.timesSent} times • {formatLastSent(note.lastSentAt)}
                   </Text>
 
+                  {isEditing ? (
+                    <View style={{ flexDirection: "row", gap: 8 }}>
+                      <Pressable
+                        accessibilityRole="button"
+                        disabled={!draftContent.trim() || isSavingThisNote}
+                        onPress={() => void saveEdit(note._id, note.priority)}
+                        style={{
+                          borderRadius: 10,
+                          borderCurve: "continuous",
+                          paddingHorizontal: 10,
+                          paddingVertical: 6,
+                          backgroundColor: "#2563eb",
+                          opacity: !draftContent.trim() || isSavingThisNote ? 0.55 : 1,
+                        }}
+                      >
+                        <Text style={{ color: "#ffffff", fontWeight: "700" }}>
+                          {isSavingThisNote ? "Saving..." : "Save"}
+                        </Text>
+                      </Pressable>
+
+                      <Pressable
+                        accessibilityRole="button"
+                        disabled={isSavingThisNote}
+                        onPress={cancelEditing}
+                        style={{
+                          borderRadius: 10,
+                          borderCurve: "continuous",
+                          paddingHorizontal: 10,
+                          paddingVertical: 6,
+                          backgroundColor: "#e2e8f0",
+                          opacity: isSavingThisNote ? 0.55 : 1,
+                        }}
+                      >
+                        <Text style={{ color: "#334155", fontWeight: "700" }}>Cancel</Text>
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => startEditing(note._id, note.content)}
+                      style={{
+                        alignSelf: "flex-start",
+                        borderRadius: 10,
+                        borderCurve: "continuous",
+                        paddingHorizontal: 10,
+                        paddingVertical: 6,
+                        backgroundColor: "#dbeafe",
+                      }}
+                    >
+                      <Text style={{ color: "#1d4ed8", fontWeight: "700" }}>Edit</Text>
+                    </Pressable>
+                  )}
+
                   <Pressable
                     accessibilityRole="button"
+                    disabled={isSavingThisNote}
                     onPress={() => void removeNote({ noteId: note._id })}
                     style={{
                       alignSelf: "flex-start",
@@ -207,6 +334,7 @@ export function HomeScreen() {
                       paddingHorizontal: 10,
                       paddingVertical: 6,
                       backgroundColor: "#fee2e2",
+                      opacity: isSavingThisNote ? 0.55 : 1,
                     }}
                   >
                     <Text style={{ color: "#b91c1c", fontWeight: "700" }}>Delete</Text>
