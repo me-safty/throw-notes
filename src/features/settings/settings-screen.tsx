@@ -8,9 +8,7 @@ import { Card } from "@/src/components/card";
 import { CreateScheduleForm } from "@/src/features/schedules/create-schedule-form";
 
 function formatTime(hour: number, minute: number) {
-  const date = new Date();
-  date.setHours(hour, minute, 0, 0);
-  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
 }
 
 export function SettingsScreen() {
@@ -171,7 +169,7 @@ export function SettingsScreen() {
                 }}
               >
                 <Text style={{ fontSize: 16, fontWeight: "700", color: "#0f172a" }}>
-                  {formatTime(schedule.hour, schedule.minute)} ({schedule.timezone})
+                  {formatTime(schedule.hour, schedule.minute)} ({schedule.timezone}, 24h)
                 </Text>
                 <Text selectable style={{ color: "#64748b", fontSize: 13 }}>
                   Next run {new Date(schedule.nextRunAt).toLocaleString()}
