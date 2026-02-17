@@ -7,9 +7,16 @@ import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { api } from "@/convex/_generated/api";
 import { Card } from "@/src/components/card";
 import { CreateScheduleForm } from "@/src/features/schedules/create-schedule-form";
+import { ScheduleTimePicker } from "@/src/features/schedules/schedule-time-picker";
 
 function formatTime(hour: number, minute: number) {
   return `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
+}
+
+function createTimeFromHourMinute(hour: number, minute: number) {
+  const date = new Date();
+  date.setHours(hour, minute, 0, 0);
+  return date;
 }
 
 const MIN_NOTES_PER_REMINDER = 1;
@@ -32,8 +39,7 @@ export function SettingsScreen() {
   const [editingScheduleId, setEditingScheduleId] = React.useState<Id<"reminderSchedules"> | null>(
     null,
   );
-  const [editingHourInput, setEditingHourInput] = React.useState("");
-  const [editingMinuteInput, setEditingMinuteInput] = React.useState("");
+  const [editingTime, setEditingTime] = React.useState<Date | null>(null);
   const [editingNotesInput, setEditingNotesInput] = React.useState("1");
 
   const onCreateSchedule = React.useCallback(
@@ -87,8 +93,7 @@ export function SettingsScreen() {
       setErrorMessage(null);
       setStatusMessage(null);
       setEditingScheduleId(schedule._id);
-      setEditingHourInput(schedule.hour.toString().padStart(2, "0"));
-      setEditingMinuteInput(schedule.minute.toString().padStart(2, "0"));
+      setEditingTime(createTimeFromHourMinute(schedule.hour, schedule.minute));
       setEditingNotesInput((schedule.notesPerReminder ?? 1).toString());
     },
     [],
@@ -96,15 +101,19 @@ export function SettingsScreen() {
 
   const cancelEditingSchedule = React.useCallback(() => {
     setEditingScheduleId(null);
-    setEditingHourInput("");
-    setEditingMinuteInput("");
+    setEditingTime(null);
     setEditingNotesInput("1");
   }, []);
 
   const saveScheduleEdit = React.useCallback(
     async (schedule: { _id: Id<"reminderSchedules">; timezone: string }) => {
-      const hour = Number.parseInt(editingHourInput, 10);
-      const minute = Number.parseInt(editingMinuteInput, 10);
+      if (!editingTime) {
+        setErrorMessage("Select a reminder time.");
+        return;
+      }
+
+      const hour = editingTime.getHours();
+      const minute = editingTime.getMinutes();
       const notesPerReminder = Number.parseInt(editingNotesInput, 10);
 
       if (!Number.isInteger(hour) || hour < 0 || hour > 23) {
@@ -151,8 +160,7 @@ export function SettingsScreen() {
     },
     [
       cancelEditingSchedule,
-      editingHourInput,
-      editingMinuteInput,
+      editingTime,
       editingNotesInput,
       updateSchedule,
     ],
@@ -287,61 +295,10 @@ export function SettingsScreen() {
 
                   {isEditing ? (
                     <View style={{ gap: 8 }}>
-                      <View style={{ flexDirection: "row", gap: 8 }}>
-                        <View style={{ flex: 1, gap: 4 }}>
-                          <Text style={{ color: "#334155", fontWeight: "600", fontSize: 13 }}>
-                            Hour (0-23)
-                          </Text>
-                          <TextInput
-                            value={editingHourInput}
-                            onChangeText={(value) =>
-                              setEditingHourInput(value.replace(/[^0-9]/g, "").slice(0, 2))
-                            }
-                            keyboardType="number-pad"
-                            inputMode="numeric"
-                            placeholder="08"
-                            placeholderTextColor="#94a3b8"
-                            style={{
-                              borderWidth: 1,
-                              borderColor: "#cbd5e1",
-                              borderRadius: 10,
-                              borderCurve: "continuous",
-                              backgroundColor: "#ffffff",
-                              color: "#0f172a",
-                              paddingHorizontal: 10,
-                              paddingVertical: 8,
-                              fontSize: 15,
-                            }}
-                          />
-                        </View>
-
-                        <View style={{ flex: 1, gap: 4 }}>
-                          <Text style={{ color: "#334155", fontWeight: "600", fontSize: 13 }}>
-                            Minute (0-59)
-                          </Text>
-                          <TextInput
-                            value={editingMinuteInput}
-                            onChangeText={(value) =>
-                              setEditingMinuteInput(value.replace(/[^0-9]/g, "").slice(0, 2))
-                            }
-                            keyboardType="number-pad"
-                            inputMode="numeric"
-                            placeholder="00"
-                            placeholderTextColor="#94a3b8"
-                            style={{
-                              borderWidth: 1,
-                              borderColor: "#cbd5e1",
-                              borderRadius: 10,
-                              borderCurve: "continuous",
-                              backgroundColor: "#ffffff",
-                              color: "#0f172a",
-                              paddingHorizontal: 10,
-                              paddingVertical: 8,
-                              fontSize: 15,
-                            }}
-                          />
-                        </View>
-                      </View>
+                      <ScheduleTimePicker
+                        value={editingTime ?? createTimeFromHourMinute(schedule.hour, schedule.minute)}
+                        onChange={setEditingTime}
+                      />
 
                       <View style={{ gap: 4 }}>
                         <Text style={{ color: "#334155", fontWeight: "600", fontSize: 13 }}>
