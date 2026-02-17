@@ -3,7 +3,10 @@ version = 1
 name = "throw-notes"
 
 [setup]
-script = ""
+script = '''
+cp /Users/safty/code/codex/throw-notes/.env.local ./
+pnpm i
+'''
 
 [[actions]]
 name = "build"
