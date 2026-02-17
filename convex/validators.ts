@@ -12,6 +12,7 @@ export const noteValidator = v.object({
   userId: v.string(),
   content: v.string(),
   priority: priorityValidator,
+  isSilenced: v.optional(v.boolean()),
   timesSent: v.number(),
   lastSentAt: v.optional(v.number()),
   createdAt: v.number(),

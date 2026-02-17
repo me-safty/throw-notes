@@ -8,6 +8,7 @@ export default defineSchema({
     userId: v.string(),
     content: v.string(),
     priority,
+    isSilenced: v.optional(v.boolean()),
     timesSent: v.number(),
     lastSentAt: v.optional(v.number()),
     createdAt: v.number(),

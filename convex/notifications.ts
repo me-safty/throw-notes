@@ -91,11 +91,13 @@ export const loadDeliveryPayload = internalQuery({
       .withIndex("by_user", (q) => q.eq("userId", schedule.userId))
       .collect();
 
+    const activeNotes = notes.filter((note) => note.isSilenced !== true);
+
     return {
       scheduleId: schedule._id,
       userId: schedule.userId,
       notesPerReminder: schedule.notesPerReminder ?? 1,
-      notes: notes.map((note) => ({
+      notes: activeNotes.map((note) => ({
         _id: note._id,
         content: note.content,
         priority: note.priority,

@@ -182,11 +182,13 @@ export function HomeScreen() {
               const colors = priorityPalette(note.priority);
               const isEditing = editingNoteId === note._id;
               const isSavingThisNote = isEditing && isSavingEdit;
+              const isSilenced = note.isSilenced === true;
 
               return (
                 <View
                   key={note._id}
                   style={{
+                    position: "relative",
                     borderRadius: 14,
                     borderCurve: "continuous",
                     borderWidth: 1,
@@ -196,6 +198,24 @@ export function HomeScreen() {
                     gap: 10,
                   }}
                 >
+                  {isSilenced ? (
+                    <View
+                      style={{
+                        position: "absolute",
+                        right: 8,
+                        top: 8,
+                        zIndex: 1,
+                        borderRadius: 999,
+                        borderCurve: "continuous",
+                        paddingHorizontal: 8,
+                        paddingVertical: 4,
+                        backgroundColor: "#e2e8f0",
+                      }}
+                    >
+                      <Text style={{ fontSize: 12, color: "#334155", fontWeight: "700" }}>🔕</Text>
+                    </View>
+                  ) : null}
+
                   {isEditing ? (
                     <TextInput
                       multiline
@@ -269,6 +289,37 @@ export function HomeScreen() {
                   >
                     Sent {note.timesSent} times • {formatLastSent(note.lastSentAt)}
                   </Text>
+
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={isSavingThisNote || isEditing}
+                    onPress={() =>
+                      void updateNote({
+                        noteId: note._id,
+                        content: note.content,
+                        priority: note.priority,
+                        isSilenced: !isSilenced,
+                      })
+                    }
+                    style={{
+                      alignSelf: "flex-start",
+                      borderRadius: 10,
+                      borderCurve: "continuous",
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      backgroundColor: isSilenced ? "#dcfce7" : "#e2e8f0",
+                      opacity: isSavingThisNote || isEditing ? 0.55 : 1,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: isSilenced ? "#166534" : "#334155",
+                        fontWeight: "700",
+                      }}
+                    >
+                      {isSilenced ? "Silent" : "Silence"}
+                    </Text>
+                  </Pressable>
 
                   {isEditing ? (
                     <View style={{ flexDirection: "row", gap: 8 }}>

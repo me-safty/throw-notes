@@ -53,6 +53,7 @@ export const create = mutation({
       userId,
       content,
       priority: args.priority,
+      isSilenced: false,
       timesSent: 0,
       createdAt: now,
       updatedAt: now,
@@ -65,6 +66,7 @@ export const update = mutation({
     noteId: v.id("notes"),
     content: v.string(),
     priority: priorityValidator,
+    isSilenced: v.optional(v.boolean()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -80,11 +82,22 @@ export const update = mutation({
       });
     }
 
-    await ctx.db.patch(args.noteId, {
+    const patch: {
+      content: string;
+      priority: "low" | "medium" | "high";
+      updatedAt: number;
+      isSilenced?: boolean;
+    } = {
       content,
       priority: args.priority,
       updatedAt: Date.now(),
-    });
+    };
+
+    if (args.isSilenced !== undefined) {
+      patch.isSilenced = args.isSilenced;
+    }
+
+    await ctx.db.patch(args.noteId, patch);
 
     return null;
   },
