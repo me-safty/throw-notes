@@ -1,7 +1,8 @@
 import { useAuth } from "@clerk/clerk-expo";
 import { useMutation, useQuery } from "convex/react";
+import type { Id } from "@/convex/_generated/dataModel";
 import React from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import { api } from "@/convex/_generated/api";
 import { Card } from "@/src/components/card";
@@ -11,9 +12,13 @@ function formatTime(hour: number, minute: number) {
   return `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
 }
 
+const MIN_NOTES_PER_REMINDER = 1;
+const MAX_NOTES_PER_REMINDER = 10;
+
 export function SettingsScreen() {
   const schedules = useQuery(api.schedules.list, {});
   const createSchedule = useMutation(api.schedules.create);
+  const updateSchedule = useMutation(api.schedules.update);
   const setScheduleEnabled = useMutation(api.schedules.setEnabled);
   const removeSchedule = useMutation(api.schedules.remove);
   const triggerTestReminder = useMutation(api.schedules.triggerTestReminder);
@@ -23,6 +28,13 @@ export function SettingsScreen() {
   const [statusMessage, setStatusMessage] = React.useState<string | null>(null);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const [isSendingTestReminder, setIsSendingTestReminder] = React.useState(false);
+  const [isSavingScheduleEdit, setIsSavingScheduleEdit] = React.useState(false);
+  const [editingScheduleId, setEditingScheduleId] = React.useState<Id<"reminderSchedules"> | null>(
+    null,
+  );
+  const [editingHourInput, setEditingHourInput] = React.useState("");
+  const [editingMinuteInput, setEditingMinuteInput] = React.useState("");
+  const [editingNotesInput, setEditingNotesInput] = React.useState("1");
 
   const onCreateSchedule = React.useCallback(
     async ({
@@ -64,6 +76,87 @@ export function SettingsScreen() {
       setIsSendingTestReminder(false);
     }
   }, [triggerTestReminder]);
+
+  const startEditingSchedule = React.useCallback(
+    (schedule: {
+      _id: Id<"reminderSchedules">;
+      hour: number;
+      minute: number;
+      notesPerReminder?: number;
+    }) => {
+      setErrorMessage(null);
+      setStatusMessage(null);
+      setEditingScheduleId(schedule._id);
+      setEditingHourInput(schedule.hour.toString().padStart(2, "0"));
+      setEditingMinuteInput(schedule.minute.toString().padStart(2, "0"));
+      setEditingNotesInput((schedule.notesPerReminder ?? 1).toString());
+    },
+    [],
+  );
+
+  const cancelEditingSchedule = React.useCallback(() => {
+    setEditingScheduleId(null);
+    setEditingHourInput("");
+    setEditingMinuteInput("");
+    setEditingNotesInput("1");
+  }, []);
+
+  const saveScheduleEdit = React.useCallback(
+    async (schedule: { _id: Id<"reminderSchedules">; timezone: string }) => {
+      const hour = Number.parseInt(editingHourInput, 10);
+      const minute = Number.parseInt(editingMinuteInput, 10);
+      const notesPerReminder = Number.parseInt(editingNotesInput, 10);
+
+      if (!Number.isInteger(hour) || hour < 0 || hour > 23) {
+        setErrorMessage("Hour must be between 0 and 23.");
+        return;
+      }
+
+      if (!Number.isInteger(minute) || minute < 0 || minute > 59) {
+        setErrorMessage("Minute must be between 0 and 59.");
+        return;
+      }
+
+      if (
+        !Number.isInteger(notesPerReminder) ||
+        notesPerReminder < MIN_NOTES_PER_REMINDER ||
+        notesPerReminder > MAX_NOTES_PER_REMINDER
+      ) {
+        setErrorMessage(
+          `Notes per reminder must be between ${MIN_NOTES_PER_REMINDER} and ${MAX_NOTES_PER_REMINDER}.`,
+        );
+        return;
+      }
+
+      try {
+        setErrorMessage(null);
+        setStatusMessage(null);
+        setIsSavingScheduleEdit(true);
+        await updateSchedule({
+          scheduleId: schedule._id,
+          hour,
+          minute,
+          timezone: schedule.timezone,
+          notesPerReminder,
+        });
+        setStatusMessage("Reminder updated.");
+        cancelEditingSchedule();
+      } catch (caughtError) {
+        setErrorMessage(
+          caughtError instanceof Error ? caughtError.message : "Unable to update reminder.",
+        );
+      } finally {
+        setIsSavingScheduleEdit(false);
+      }
+    },
+    [
+      cancelEditingSchedule,
+      editingHourInput,
+      editingMinuteInput,
+      editingNotesInput,
+      updateSchedule,
+    ],
+  );
 
   return (
     <ScrollView
@@ -165,73 +258,213 @@ export function SettingsScreen() {
           </Text>
         ) : (
           <View style={{ gap: 12 }}>
-            {schedules.map((schedule) => (
-              <View
-                key={schedule._id}
-                style={{
-                  borderRadius: 14,
-                  borderCurve: "continuous",
-                  borderWidth: 1,
-                  borderColor: "#dbeafe",
-                  backgroundColor: "#f8fafc",
-                  padding: 12,
-                  gap: 8,
-                }}
-              >
-                <Text style={{ fontSize: 16, fontWeight: "700", color: "#0f172a" }}>
-                  {formatTime(schedule.hour, schedule.minute)} ({schedule.timezone}, 24h)
-                </Text>
-                <Text selectable style={{ color: "#64748b", fontSize: 13 }}>
-                  Next run {new Date(schedule.nextRunAt).toLocaleString()}
-                </Text>
-                <Text selectable style={{ color: "#64748b", fontSize: 13 }}>
-                  Sends {schedule.notesPerReminder ?? 1} note
-                  {(schedule.notesPerReminder ?? 1) === 1 ? "" : "s"} per reminder
-                </Text>
+            {schedules.map((schedule) => {
+              const isEditing = editingScheduleId === schedule._id;
 
-                <View style={{ flexDirection: "row", gap: 8 }}>
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() =>
-                      void setScheduleEnabled({
-                        scheduleId: schedule._id,
-                        enabled: !schedule.enabled,
-                      })
-                    }
-                    style={{
-                      borderRadius: 10,
-                      borderCurve: "continuous",
-                      paddingHorizontal: 10,
-                      paddingVertical: 6,
-                      backgroundColor: schedule.enabled ? "#dcfce7" : "#e2e8f0",
-                    }}
-                  >
-                    <Text
+              return (
+                <View
+                  key={schedule._id}
+                  style={{
+                    borderRadius: 14,
+                    borderCurve: "continuous",
+                    borderWidth: 1,
+                    borderColor: "#dbeafe",
+                    backgroundColor: "#f8fafc",
+                    padding: 12,
+                    gap: 8,
+                  }}
+                >
+                  <Text style={{ fontSize: 16, fontWeight: "700", color: "#0f172a" }}>
+                    {formatTime(schedule.hour, schedule.minute)} ({schedule.timezone}, 24h)
+                  </Text>
+                  <Text selectable style={{ color: "#64748b", fontSize: 13 }}>
+                    Next run {new Date(schedule.nextRunAt).toLocaleString()}
+                  </Text>
+                  <Text selectable style={{ color: "#64748b", fontSize: 13 }}>
+                    Sends {schedule.notesPerReminder ?? 1} note
+                    {(schedule.notesPerReminder ?? 1) === 1 ? "" : "s"} per reminder
+                  </Text>
+
+                  {isEditing ? (
+                    <View style={{ gap: 8 }}>
+                      <View style={{ flexDirection: "row", gap: 8 }}>
+                        <View style={{ flex: 1, gap: 4 }}>
+                          <Text style={{ color: "#334155", fontWeight: "600", fontSize: 13 }}>
+                            Hour (0-23)
+                          </Text>
+                          <TextInput
+                            value={editingHourInput}
+                            onChangeText={(value) =>
+                              setEditingHourInput(value.replace(/[^0-9]/g, "").slice(0, 2))
+                            }
+                            keyboardType="number-pad"
+                            inputMode="numeric"
+                            placeholder="08"
+                            placeholderTextColor="#94a3b8"
+                            style={{
+                              borderWidth: 1,
+                              borderColor: "#cbd5e1",
+                              borderRadius: 10,
+                              borderCurve: "continuous",
+                              backgroundColor: "#ffffff",
+                              color: "#0f172a",
+                              paddingHorizontal: 10,
+                              paddingVertical: 8,
+                              fontSize: 15,
+                            }}
+                          />
+                        </View>
+
+                        <View style={{ flex: 1, gap: 4 }}>
+                          <Text style={{ color: "#334155", fontWeight: "600", fontSize: 13 }}>
+                            Minute (0-59)
+                          </Text>
+                          <TextInput
+                            value={editingMinuteInput}
+                            onChangeText={(value) =>
+                              setEditingMinuteInput(value.replace(/[^0-9]/g, "").slice(0, 2))
+                            }
+                            keyboardType="number-pad"
+                            inputMode="numeric"
+                            placeholder="00"
+                            placeholderTextColor="#94a3b8"
+                            style={{
+                              borderWidth: 1,
+                              borderColor: "#cbd5e1",
+                              borderRadius: 10,
+                              borderCurve: "continuous",
+                              backgroundColor: "#ffffff",
+                              color: "#0f172a",
+                              paddingHorizontal: 10,
+                              paddingVertical: 8,
+                              fontSize: 15,
+                            }}
+                          />
+                        </View>
+                      </View>
+
+                      <View style={{ gap: 4 }}>
+                        <Text style={{ color: "#334155", fontWeight: "600", fontSize: 13 }}>
+                          Notes per reminder ({MIN_NOTES_PER_REMINDER}-{MAX_NOTES_PER_REMINDER})
+                        </Text>
+                        <TextInput
+                          value={editingNotesInput}
+                          onChangeText={(value) =>
+                            setEditingNotesInput(value.replace(/[^0-9]/g, "").slice(0, 2))
+                          }
+                          keyboardType="number-pad"
+                          inputMode="numeric"
+                          placeholder="1"
+                          placeholderTextColor="#94a3b8"
+                          style={{
+                            borderWidth: 1,
+                            borderColor: "#cbd5e1",
+                            borderRadius: 10,
+                            borderCurve: "continuous",
+                            backgroundColor: "#ffffff",
+                            color: "#0f172a",
+                            paddingHorizontal: 10,
+                            paddingVertical: 8,
+                            fontSize: 15,
+                          }}
+                        />
+                      </View>
+                    </View>
+                  ) : null}
+
+                  <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() =>
+                        void setScheduleEnabled({
+                          scheduleId: schedule._id,
+                          enabled: !schedule.enabled,
+                        })
+                      }
                       style={{
-                        color: schedule.enabled ? "#166534" : "#334155",
-                        fontWeight: "700",
+                        borderRadius: 10,
+                        borderCurve: "continuous",
+                        paddingHorizontal: 10,
+                        paddingVertical: 6,
+                        backgroundColor: schedule.enabled ? "#dcfce7" : "#e2e8f0",
                       }}
                     >
-                      {schedule.enabled ? "Enabled" : "Disabled"}
-                    </Text>
-                  </Pressable>
+                      <Text
+                        style={{
+                          color: schedule.enabled ? "#166534" : "#334155",
+                          fontWeight: "700",
+                        }}
+                      >
+                        {schedule.enabled ? "Enabled" : "Disabled"}
+                      </Text>
+                    </Pressable>
 
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => void removeSchedule({ scheduleId: schedule._id })}
-                    style={{
-                      borderRadius: 10,
-                      borderCurve: "continuous",
-                      paddingHorizontal: 10,
-                      paddingVertical: 6,
-                      backgroundColor: "#fee2e2",
-                    }}
-                  >
-                    <Text style={{ color: "#b91c1c", fontWeight: "700" }}>Delete</Text>
-                  </Pressable>
+                    {isEditing ? (
+                      <>
+                        <Pressable
+                          accessibilityRole="button"
+                          disabled={isSavingScheduleEdit}
+                          onPress={() => void saveScheduleEdit(schedule)}
+                          style={{
+                            borderRadius: 10,
+                            borderCurve: "continuous",
+                            paddingHorizontal: 10,
+                            paddingVertical: 6,
+                            backgroundColor: isSavingScheduleEdit ? "#bfdbfe" : "#dbeafe",
+                          }}
+                        >
+                          <Text style={{ color: "#1e3a8a", fontWeight: "700" }}>
+                            {isSavingScheduleEdit ? "Saving..." : "Save"}
+                          </Text>
+                        </Pressable>
+                        <Pressable
+                          accessibilityRole="button"
+                          disabled={isSavingScheduleEdit}
+                          onPress={cancelEditingSchedule}
+                          style={{
+                            borderRadius: 10,
+                            borderCurve: "continuous",
+                            paddingHorizontal: 10,
+                            paddingVertical: 6,
+                            backgroundColor: "#e2e8f0",
+                          }}
+                        >
+                          <Text style={{ color: "#334155", fontWeight: "700" }}>Cancel</Text>
+                        </Pressable>
+                      </>
+                    ) : (
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => startEditingSchedule(schedule)}
+                        style={{
+                          borderRadius: 10,
+                          borderCurve: "continuous",
+                          paddingHorizontal: 10,
+                          paddingVertical: 6,
+                          backgroundColor: "#e0f2fe",
+                        }}
+                      >
+                        <Text style={{ color: "#075985", fontWeight: "700" }}>Edit</Text>
+                      </Pressable>
+                    )}
+
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => void removeSchedule({ scheduleId: schedule._id })}
+                      style={{
+                        borderRadius: 10,
+                        borderCurve: "continuous",
+                        paddingHorizontal: 10,
+                        paddingVertical: 6,
+                        backgroundColor: "#fee2e2",
+                      }}
+                    >
+                      <Text style={{ color: "#b91c1c", fontWeight: "700" }}>Delete</Text>
+                    </Pressable>
+                  </View>
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         )}
       </Card>

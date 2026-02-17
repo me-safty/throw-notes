@@ -143,6 +143,59 @@ export const setEnabled = mutation({
   },
 });
 
+export const update = mutation({
+  args: {
+    scheduleId: v.id("reminderSchedules"),
+    hour: v.number(),
+    minute: v.number(),
+    timezone: v.string(),
+    notesPerReminder: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const schedule = await ctx.db.get(args.scheduleId);
+
+    if (!schedule || schedule.userId !== userId) {
+      throw new ConvexError({
+        code: "NOT_FOUND",
+        message: "Schedule not found.",
+      });
+    }
+
+    validateHourAndMinute(args.hour, args.minute);
+    validateNotesPerReminder(args.notesPerReminder);
+
+    try {
+      assertValidTimezone(args.timezone);
+    } catch {
+      throw new ConvexError({
+        code: "INVALID_TIMEZONE",
+        message: "Timezone is invalid.",
+      });
+    }
+
+    const now = Date.now();
+    const nextRunAt = computeNextRunAtMs({
+      hour: args.hour,
+      minute: args.minute,
+      timezone: args.timezone,
+      fromMs: now,
+    });
+
+    await ctx.db.patch(args.scheduleId, {
+      hour: args.hour,
+      minute: args.minute,
+      timezone: args.timezone,
+      notesPerReminder: args.notesPerReminder,
+      nextRunAt,
+      updatedAt: now,
+    });
+
+    return null;
+  },
+});
+
 export const remove = mutation({
   args: {
     scheduleId: v.id("reminderSchedules"),
