@@ -17,6 +17,7 @@ type DeliveryPayload = {
   userId: string;
   tokens: string[];
   notes: NoteCandidate[];
+  notesPerReminder: number;
 };
 
 function calculateWeight(note: NoteCandidate) {
@@ -59,6 +60,29 @@ function pickWeightedRandomNote(notes: NoteCandidate[]) {
   return weightedNotes[weightedNotes.length - 1]?.note ?? null;
 }
 
+function pickWeightedRandomNotes(notes: NoteCandidate[], count: number) {
+  const selected: NoteCandidate[] = [];
+  const remaining = [...notes];
+  const maxToPick = Math.min(count, remaining.length);
+
+  for (let index = 0; index < maxToPick; index += 1) {
+    const chosenNote = pickWeightedRandomNote(remaining);
+
+    if (!chosenNote) {
+      break;
+    }
+
+    selected.push(chosenNote);
+
+    const chosenIndex = remaining.findIndex((note) => note._id === chosenNote._id);
+    if (chosenIndex >= 0) {
+      remaining.splice(chosenIndex, 1);
+    }
+  }
+
+  return selected;
+}
+
 export const deliverReminderForSchedule = internalAction({
   args: {
     scheduleId: v.id("reminderSchedules"),
@@ -79,29 +103,34 @@ export const deliverReminderForSchedule = internalAction({
       };
     }
 
-    const chosenNote = pickWeightedRandomNote(payload.notes);
+    const chosenNotes = pickWeightedRandomNotes(payload.notes, payload.notesPerReminder);
 
-    if (!chosenNote) {
+    if (chosenNotes.length === 0) {
       return {
         delivered: false,
         tokenCount: payload.tokens.length,
       };
     }
 
-    const messages = payload.tokens.map((token: string) => ({
-      to: token,
-      title: "Throw Notes",
-      body:
-        chosenNote.content.length > 180
-          ? `${chosenNote.content.slice(0, 177)}...`
-          : chosenNote.content,
-      sound: "default",
-      data: {
-        noteId: chosenNote._id,
-        scheduleId: payload.scheduleId,
-        priority: chosenNote.priority,
-      },
-    }));
+    const messagePayload = chosenNotes.flatMap((note) =>
+      payload.tokens.map((token: string) => ({
+        token,
+        noteId: note._id,
+        message: {
+          to: token,
+          title: "Throw Notes",
+          body: note.content.length > 180 ? `${note.content.slice(0, 177)}...` : note.content,
+          sound: "default",
+          data: {
+            noteId: note._id,
+            scheduleId: payload.scheduleId,
+            priority: note.priority,
+          },
+        },
+      })),
+    );
+
+    const messages = messagePayload.map((item) => item.message);
 
     const response = await fetch("https://exp.host/--/api/v2/push/send", {
       method: "POST",
@@ -131,38 +160,41 @@ export const deliverReminderForSchedule = internalAction({
         ? [json.data]
         : [];
 
-    let successfulDeliveries = 0;
-    const invalidTokens: string[] = [];
+    const successfulNoteIds = new Set<Id<"notes">>();
+    const invalidTokens = new Set<string>();
 
     for (const [index, dataItem] of dataItems.entries()) {
+      const deliveredMessage = messagePayload[index];
+
+      if (!deliveredMessage) {
+        continue;
+      }
+
       if (dataItem.status === "ok") {
-        successfulDeliveries += 1;
+        successfulNoteIds.add(deliveredMessage.noteId);
       }
 
       if (dataItem.status === "error" && dataItem.details?.error === "DeviceNotRegistered") {
-        const token = payload.tokens[index];
-        if (token) {
-          invalidTokens.push(token);
-        }
+        invalidTokens.add(deliveredMessage.token);
       }
     }
 
-    if (invalidTokens.length > 0) {
+    if (invalidTokens.size > 0) {
       await ctx.runMutation(internal.pushTokens.disableInvalidTokens, {
-        tokens: invalidTokens,
+        tokens: Array.from(invalidTokens),
       });
     }
 
-    if (successfulDeliveries > 0) {
+    if (successfulNoteIds.size > 0) {
       await ctx.runMutation(internal.notifications.recordDeliverySuccess, {
         scheduleId: payload.scheduleId,
-        noteId: chosenNote._id,
+        noteIds: Array.from(successfulNoteIds),
         deliveredAt: Date.now(),
       });
     }
 
     return {
-      delivered: successfulDeliveries > 0,
+      delivered: successfulNoteIds.size > 0,
       tokenCount: payload.tokens.length,
     };
   },

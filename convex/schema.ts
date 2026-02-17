@@ -19,6 +19,7 @@ export default defineSchema({
     hour: v.number(),
     minute: v.number(),
     timezone: v.string(),
+    notesPerReminder: v.optional(v.number()),
     enabled: v.boolean(),
     nextRunAt: v.number(),
     lastRunAt: v.optional(v.number()),

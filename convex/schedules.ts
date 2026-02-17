@@ -6,6 +6,9 @@ import { requireUserId } from "./helpers/auth";
 import { assertValidTimezone, computeNextRunAtMs } from "./lib/time";
 import { scheduleValidator } from "./validators";
 
+const MIN_NOTES_PER_REMINDER = 1;
+const MAX_NOTES_PER_REMINDER = 10;
+
 function validateHourAndMinute(hour: number, minute: number) {
   if (!Number.isInteger(hour) || !Number.isInteger(minute)) {
     throw new ConvexError({
@@ -18,6 +21,22 @@ function validateHourAndMinute(hour: number, minute: number) {
     throw new ConvexError({
       code: "INVALID_TIME",
       message: "Time must be in 24-hour range.",
+    });
+  }
+}
+
+function validateNotesPerReminder(notesPerReminder: number) {
+  if (!Number.isInteger(notesPerReminder)) {
+    throw new ConvexError({
+      code: "INVALID_NOTES_PER_REMINDER",
+      message: "Notes per reminder must be an integer.",
+    });
+  }
+
+  if (notesPerReminder < MIN_NOTES_PER_REMINDER || notesPerReminder > MAX_NOTES_PER_REMINDER) {
+    throw new ConvexError({
+      code: "INVALID_NOTES_PER_REMINDER",
+      message: `Notes per reminder must be between ${MIN_NOTES_PER_REMINDER} and ${MAX_NOTES_PER_REMINDER}.`,
     });
   }
 }
@@ -49,11 +68,14 @@ export const create = mutation({
     hour: v.number(),
     minute: v.number(),
     timezone: v.string(),
+    notesPerReminder: v.optional(v.number()),
   },
   returns: v.id("reminderSchedules"),
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
     validateHourAndMinute(args.hour, args.minute);
+    const notesPerReminder = args.notesPerReminder ?? MIN_NOTES_PER_REMINDER;
+    validateNotesPerReminder(notesPerReminder);
 
     try {
       assertValidTimezone(args.timezone);
@@ -77,6 +99,7 @@ export const create = mutation({
       hour: args.hour,
       minute: args.minute,
       timezone: args.timezone,
+      notesPerReminder,
       enabled: true,
       nextRunAt,
       createdAt: now,

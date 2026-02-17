@@ -19,6 +19,7 @@ const deliveryPayloadValidator = v.union(
     userId: v.string(),
     tokens: v.array(v.string()),
     notes: v.array(noteCandidateValidator),
+    notesPerReminder: v.number(),
   }),
   v.null(),
 );
@@ -93,6 +94,7 @@ export const loadDeliveryPayload = internalQuery({
     return {
       scheduleId: schedule._id,
       userId: schedule.userId,
+      notesPerReminder: schedule.notesPerReminder ?? 1,
       notes: notes.map((note) => ({
         _id: note._id,
         content: note.content,
@@ -108,25 +110,27 @@ export const loadDeliveryPayload = internalQuery({
 export const recordDeliverySuccess = internalMutation({
   args: {
     scheduleId: v.id("reminderSchedules"),
-    noteId: v.id("notes"),
+    noteIds: v.array(v.id("notes")),
     deliveredAt: v.number(),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const note = await ctx.db.get(args.noteId);
+    for (const noteId of args.noteIds) {
+      const note = await ctx.db.get(noteId);
 
-    if (!note) {
-      throw new ConvexError({
-        code: "NOT_FOUND",
-        message: "Note not found during reminder delivery.",
+      if (!note) {
+        throw new ConvexError({
+          code: "NOT_FOUND",
+          message: "Note not found during reminder delivery.",
+        });
+      }
+
+      await ctx.db.patch(note._id, {
+        timesSent: note.timesSent + 1,
+        lastSentAt: args.deliveredAt,
+        updatedAt: args.deliveredAt,
       });
     }
-
-    await ctx.db.patch(note._id, {
-      timesSent: note.timesSent + 1,
-      lastSentAt: args.deliveredAt,
-      updatedAt: args.deliveredAt,
-    });
 
     await ctx.db.patch(args.scheduleId, {
       lastRunAt: args.deliveredAt,

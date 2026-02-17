@@ -3,7 +3,7 @@ import DateTimePicker, {
   type DateTimePickerEvent,
 } from "@react-native-community/datetimepicker"
 import { requireNativeModule } from "expo-modules-core"
-import { Pressable, Text, View } from "react-native"
+import { Pressable, Text, TextInput, View } from "react-native"
 
 import { Card } from "@/src/components/card"
 
@@ -12,8 +12,12 @@ type CreateScheduleFormProps = {
     hour: number
     minute: number
     timezone: string
+    notesPerReminder: number
   }) => Promise<void>
 }
+
+const MIN_NOTES_PER_REMINDER = 1
+const MAX_NOTES_PER_REMINDER = 10
 
 type ExpoUIDateTimePickerProps = {
   initialDate: string
@@ -80,12 +84,6 @@ function createDefaultTime() {
   return date
 }
 
-function formatTime24Hour(date: Date) {
-  const hour = date.getHours().toString().padStart(2, "0")
-  const minute = date.getMinutes().toString().padStart(2, "0")
-  return `${hour}:${minute}`
-}
-
 export function CreateScheduleForm({ onCreate }: CreateScheduleFormProps) {
   const isIOS = process.env.EXPO_OS === "ios"
   const hasExpoUI = React.useMemo(() => hasExpoUINativeModule(), [])
@@ -103,17 +101,13 @@ export function CreateScheduleForm({ onCreate }: CreateScheduleFormProps) {
     ? Boolean(IOSDateTimePicker && IOSHost)
     : Boolean(AndroidDateTimePicker)
   const [selectedTime, setSelectedTime] = React.useState(createDefaultTime)
+  const [notesPerReminderInput, setNotesPerReminderInput] = React.useState("1")
   const [isSubmitting, setIsSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const timezone = React.useMemo(
     () => Intl.DateTimeFormat().resolvedOptions().timeZone,
     [],
   )
-  const displayTime = React.useMemo(
-    () => formatTime24Hour(selectedTime),
-    [selectedTime],
-  )
-
   const onDateSelected = React.useCallback((picked: Date) => {
     setSelectedTime((previous) => {
       const updated = new Date(previous)
@@ -142,6 +136,18 @@ export function CreateScheduleForm({ onCreate }: CreateScheduleFormProps) {
       return
     }
 
+    const notesPerReminder = Number.parseInt(notesPerReminderInput, 10)
+    if (
+      !Number.isInteger(notesPerReminder) ||
+      notesPerReminder < MIN_NOTES_PER_REMINDER ||
+      notesPerReminder > MAX_NOTES_PER_REMINDER
+    ) {
+      setError(
+        `Notes per reminder must be between ${MIN_NOTES_PER_REMINDER} and ${MAX_NOTES_PER_REMINDER}.`,
+      )
+      return
+    }
+
     setError(null)
     try {
       setIsSubmitting(true)
@@ -149,6 +155,7 @@ export function CreateScheduleForm({ onCreate }: CreateScheduleFormProps) {
         hour: selectedTime.getHours(),
         minute: selectedTime.getMinutes(),
         timezone,
+        notesPerReminder,
       })
     } catch (caughtError) {
       setError(
@@ -159,7 +166,7 @@ export function CreateScheduleForm({ onCreate }: CreateScheduleFormProps) {
     } finally {
       setIsSubmitting(false)
     }
-  }, [isSubmitting, onCreate, selectedTime, timezone])
+  }, [isSubmitting, notesPerReminderInput, onCreate, selectedTime, timezone])
 
   return (
     <Card>
@@ -234,6 +241,36 @@ export function CreateScheduleForm({ onCreate }: CreateScheduleFormProps) {
       <Text selectable style={{ color: "#64748b" }}>
         Timezone: {timezone}
       </Text>
+
+      <View style={{ gap: 6 }}>
+        <Text selectable style={{ color: "#334155", fontWeight: "600" }}>
+          Notes per reminder ({MIN_NOTES_PER_REMINDER}-{MAX_NOTES_PER_REMINDER})
+        </Text>
+        <TextInput
+          value={notesPerReminderInput}
+          onChangeText={(value) => {
+            const normalized = value.replace(/[^0-9]/g, "")
+            setNotesPerReminderInput(normalized)
+          }}
+          keyboardType="number-pad"
+          inputMode="numeric"
+          maxLength={2}
+          placeholder="1"
+          placeholderTextColor="#94a3b8"
+          style={{
+            borderWidth: 1,
+            borderColor: "#cbd5e1",
+            borderRadius: 12,
+            borderCurve: "continuous",
+            backgroundColor: "#ffffff",
+            color: "#0f172a",
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            fontSize: 16,
+            fontWeight: "600",
+          }}
+        />
+      </View>
 
       <Pressable
         accessibilityRole="button"

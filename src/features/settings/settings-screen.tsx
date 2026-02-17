@@ -25,10 +25,20 @@ export function SettingsScreen() {
   const [isSendingTestReminder, setIsSendingTestReminder] = React.useState(false);
 
   const onCreateSchedule = React.useCallback(
-    async ({ hour, minute, timezone }: { hour: number; minute: number; timezone: string }) => {
+    async ({
+      hour,
+      minute,
+      timezone,
+      notesPerReminder,
+    }: {
+      hour: number;
+      minute: number;
+      timezone: string;
+      notesPerReminder: number;
+    }) => {
       try {
         setErrorMessage(null);
-        await createSchedule({ hour, minute, timezone });
+        await createSchedule({ hour, minute, timezone, notesPerReminder });
         setStatusMessage("Reminder schedule added.");
       } catch (caughtError) {
         setErrorMessage(
@@ -173,6 +183,10 @@ export function SettingsScreen() {
                 </Text>
                 <Text selectable style={{ color: "#64748b", fontSize: 13 }}>
                   Next run {new Date(schedule.nextRunAt).toLocaleString()}
+                </Text>
+                <Text selectable style={{ color: "#64748b", fontSize: 13 }}>
+                  Sends {schedule.notesPerReminder ?? 1} note
+                  {(schedule.notesPerReminder ?? 1) === 1 ? "" : "s"} per reminder
                 </Text>
 
                 <View style={{ flexDirection: "row", gap: 8 }}>
