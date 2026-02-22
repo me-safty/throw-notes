@@ -1,7 +1,8 @@
 import { useAuth } from "@clerk/clerk-expo";
 import { useMutation, useQuery } from "convex/react";
+import Constants from "expo-constants";
 import React from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Alert, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import { api } from "@/convex/_generated/api";
 import { type Id } from "@/convex/_generated/dataModel";
@@ -34,7 +35,9 @@ export function HomeScreen() {
   const notes = useQuery(api.notes.list, {});
   const updateNote = useMutation(api.notes.update);
   const removeNote = useMutation(api.notes.remove);
+  const isExpoGo = Constants.appOwnership === "expo";
   const [editingNoteId, setEditingNoteId] = React.useState<Id<"notes"> | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = React.useState<Id<"notes"> | null>(null);
   const [draftContent, setDraftContent] = React.useState("");
   const [isSavingEdit, setIsSavingEdit] = React.useState(false);
   const [editError, setEditError] = React.useState<string | null>(null);
@@ -80,6 +83,25 @@ export function HomeScreen() {
       }
     },
     [draftContent, isSavingEdit, updateNote],
+  );
+
+  const requestDelete = React.useCallback(
+    (noteId: Id<"notes">) => {
+      if (isExpoGo) {
+        setPendingDeleteId(noteId);
+        return;
+      }
+
+      Alert.alert("Delete note?", "This action cannot be undone.", [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => void removeNote({ noteId }),
+        },
+      ]);
+    },
+    [isExpoGo, removeNote],
   );
 
   return (
@@ -377,7 +399,7 @@ export function HomeScreen() {
                   <Pressable
                     accessibilityRole="button"
                     disabled={isSavingThisNote}
-                    onPress={() => void removeNote({ noteId: note._id })}
+                    onPress={() => requestDelete(note._id)}
                     style={{
                       alignSelf: "flex-start",
                       borderRadius: 10,
@@ -396,6 +418,75 @@ export function HomeScreen() {
           </View>
         )}
       </Card>
+
+      <Modal
+        visible={pendingDeleteId !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPendingDeleteId(null)}
+      >
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            padding: 20,
+            backgroundColor: "rgba(15, 23, 42, 0.35)",
+          }}
+        >
+          <View
+            style={{
+              borderRadius: 14,
+              borderCurve: "continuous",
+              padding: 16,
+              gap: 12,
+              backgroundColor: "#ffffff",
+            }}
+          >
+            <Text selectable style={{ fontSize: 17, fontWeight: "700", color: "#0f172a" }}>
+              Delete note?
+            </Text>
+            <Text selectable style={{ color: "#334155", lineHeight: 20 }}>
+              This action cannot be undone.
+            </Text>
+
+            <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 8 }}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setPendingDeleteId(null)}
+                style={{
+                  borderRadius: 10,
+                  borderCurve: "continuous",
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                  backgroundColor: "#e2e8f0",
+                }}
+              >
+                <Text style={{ color: "#334155", fontWeight: "700" }}>Cancel</Text>
+              </Pressable>
+
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  const noteId = pendingDeleteId;
+                  setPendingDeleteId(null);
+                  if (noteId) {
+                    void removeNote({ noteId });
+                  }
+                }}
+                style={{
+                  borderRadius: 10,
+                  borderCurve: "continuous",
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                  backgroundColor: "#fee2e2",
+                }}
+              >
+                <Text style={{ color: "#b91c1c", fontWeight: "700" }}>Delete</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
