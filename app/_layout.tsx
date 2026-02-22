@@ -1,8 +1,11 @@
+import "react-native-gesture-handler";
+
 import { ClerkProvider, useAuth } from "@clerk/clerk-expo";
 import { tokenCache } from "@clerk/clerk-expo/token-cache";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { Stack } from "expo-router";
 import React from "react";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { ScrollView, Text, View } from "react-native";
 
 import { createConvexClient } from "@/src/lib/convex";
@@ -49,23 +52,25 @@ export default function RootLayout() {
   const convex = React.useMemo(() => createConvexClient(env.convexUrl), []);
 
   return (
-    <ClerkProvider publishableKey={env.clerkPublishableKey} tokenCache={tokenCache}>
-      <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
-        <Stack>
-          <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen
-            name="note-modal"
-            options={{
-              title: "New Note",
-              presentation: "formSheet",
-              sheetGrabberVisible: true,
-              sheetAllowedDetents: [0.55, 1.0],
-              contentStyle: { backgroundColor: "transparent" },
-            }}
-          />
-        </Stack>
-      </ConvexProviderWithClerk>
-    </ClerkProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ClerkProvider publishableKey={env.clerkPublishableKey} tokenCache={tokenCache}>
+        <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
+          <Stack>
+            <Stack.Screen name="index" options={{ headerShown: false }} />
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen
+              name="note-modal"
+              options={{
+                title: "New Note",
+                presentation: "formSheet",
+                sheetGrabberVisible: true,
+                sheetAllowedDetents: [0.55, 1.0],
+                contentStyle: { backgroundColor: "transparent" },
+              }}
+            />
+          </Stack>
+        </ConvexProviderWithClerk>
+      </ClerkProvider>
+    </GestureHandlerRootView>
   );
 }

@@ -38,6 +38,23 @@ export const list = query({
   },
 });
 
+export const getById = query({
+  args: {
+    noteId: v.id("notes"),
+  },
+  returns: v.union(noteValidator, v.null()),
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const note = await ctx.db.get(args.noteId);
+
+    if (!note || note.userId !== userId) {
+      return null;
+    }
+
+    return note;
+  },
+});
+
 export const create = mutation({
   args: {
     content: v.string(),
