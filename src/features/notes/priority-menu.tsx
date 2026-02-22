@@ -44,16 +44,9 @@ export function PriorityMenu({ value, onChange, disabled = false }: PriorityMenu
           <Pressable
             accessibilityRole="button"
             disabled={disabled}
-            style={{
-              borderRadius: 10,
-              borderCurve: "continuous",
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-              backgroundColor: "#e2e8f0",
-              opacity: disabled ? 0.55 : 1,
-            }}
+            style={{ opacity: disabled ? 0.55 : 1 }}
           >
-            <Text style={{ color: "#334155", fontWeight: "700" }}>Options</Text>
+            <Text style={{ color: "#2563eb", fontSize: 17, fontWeight: "500" }}>Options</Text>
           </Pressable>
         </DropdownMenu.Trigger>
 
@@ -76,16 +69,9 @@ export function PriorityMenu({ value, onChange, disabled = false }: PriorityMenu
         accessibilityRole="button"
         disabled={disabled}
         onPress={() => setIsCustomMenuOpen(true)}
-        style={{
-          borderRadius: 10,
-          borderCurve: "continuous",
-          paddingHorizontal: 10,
-          paddingVertical: 6,
-          backgroundColor: "#e2e8f0",
-          opacity: disabled ? 0.55 : 1,
-        }}
+        style={{ opacity: disabled ? 0.55 : 1 }}
       >
-        <Text style={{ color: "#334155", fontWeight: "700" }}>Options</Text>
+        <Text style={{ color: "#2563eb", fontSize: 17, fontWeight: "500" }}>Options</Text>
       </Pressable>
 
       <Modal

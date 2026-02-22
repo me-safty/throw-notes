@@ -5,12 +5,11 @@ import { ScrollView, Text, TextInput, View } from "react-native";
 
 import { api } from "@/convex/_generated/api";
 import { type Id } from "@/convex/_generated/dataModel";
-import { Card } from "@/src/components/card";
-import { PriorityMenu } from "@/src/features/notes/priority-menu";
 import { type NotePriority } from "@/src/features/notes/create-note-form";
+import { PriorityMenu } from "@/src/features/notes/priority-menu";
 
 type NoteDetailScreenProps = {
-  noteId: Id<"notes">;
+  noteId?: Id<"notes">;
 };
 
 type SaveSnapshot = {
@@ -20,52 +19,81 @@ type SaveSnapshot = {
 
 const AUTOSAVE_DELAY_MS = 700;
 
+function formatNoteDate(value: number) {
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "long",
+    timeStyle: "short",
+  }).format(value);
+}
+
 export function NoteDetailScreen({ noteId }: NoteDetailScreenProps) {
-  const note = useQuery(api.notes.getById, { noteId });
-  const updateNote = useMutation(api.notes.update);
+  const isNewNote = noteId === undefined;
+  const initialTimestamp = React.useRef(Date.now());
+
   const navigation = useNavigation();
+
+  const createNote = useMutation(api.notes.create);
+  const updateNote = useMutation(api.notes.update);
+
+  const [activeNoteId, setActiveNoteId] = React.useState<Id<"notes"> | null>(noteId ?? null);
+  const note = useQuery(api.notes.getById, activeNoteId ? { noteId: activeNoteId } : "skip");
 
   const [content, setContent] = React.useState("");
   const [priority, setPriority] = React.useState<NotePriority>("medium");
-  const [hasInitialized, setHasInitialized] = React.useState(false);
-  const [saveState, setSaveState] = React.useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [hasInitialized, setHasInitialized] = React.useState(isNewNote);
   const [saveError, setSaveError] = React.useState<string | null>(null);
+  const [lastSavedAt, setLastSavedAt] = React.useState<number | null>(isNewNote ? Date.now() : null);
 
-  const lastSavedRef = React.useRef<SaveSnapshot | null>(null);
+  const lastSavedRef = React.useRef<SaveSnapshot | null>(
+    isNewNote ? { content: "", priority: "medium" } : null,
+  );
   const latestDraftRef = React.useRef<SaveSnapshot>({ content: "", priority: "medium" });
   const isDirtyRef = React.useRef(false);
   const isFlushingRef = React.useRef(false);
 
   React.useEffect(() => {
+    setActiveNoteId(noteId ?? null);
     setContent("");
     setPriority("medium");
-    setHasInitialized(false);
-    setSaveState("idle");
     setSaveError(null);
+    setLastSavedAt(isNewNote ? Date.now() : null);
+
+    if (isNewNote) {
+      const emptySnapshot: SaveSnapshot = { content: "", priority: "medium" };
+      setHasInitialized(true);
+      lastSavedRef.current = emptySnapshot;
+      latestDraftRef.current = emptySnapshot;
+      isDirtyRef.current = false;
+      isFlushingRef.current = false;
+      return;
+    }
+
+    setHasInitialized(false);
     lastSavedRef.current = null;
     latestDraftRef.current = { content: "", priority: "medium" };
     isDirtyRef.current = false;
     isFlushingRef.current = false;
-  }, [noteId]);
+  }, [isNewNote, noteId]);
 
   React.useEffect(() => {
-    if (!note || hasInitialized) {
+    if (isNewNote || !note || hasInitialized) {
       return;
     }
 
+    const savedSnapshot: SaveSnapshot = {
+      content: note.content,
+      priority: note.priority,
+    };
+
     setContent(note.content);
     setPriority(note.priority);
-    lastSavedRef.current = {
-      content: note.content,
-      priority: note.priority,
-    };
-    latestDraftRef.current = {
-      content: note.content,
-      priority: note.priority,
-    };
+    setLastSavedAt(note.updatedAt);
+
+    lastSavedRef.current = savedSnapshot;
+    latestDraftRef.current = savedSnapshot;
     isDirtyRef.current = false;
     setHasInitialized(true);
-  }, [hasInitialized, note]);
+  }, [hasInitialized, isNewNote, note]);
 
   const snapshot = React.useMemo<SaveSnapshot>(
     () => ({
@@ -89,31 +117,51 @@ export function NoteDetailScreen({ noteId }: NoteDetailScreenProps) {
   const saveDraft = React.useCallback(
     async (next: SaveSnapshot) => {
       if (!next.content) {
-        setSaveState("error");
-        setSaveError("Note content cannot be empty.");
-        return false;
+        if (activeNoteId) {
+          setSaveError("Note content cannot be empty.");
+          return false;
+        }
+
+        setSaveError(null);
+        return true;
       }
 
       try {
-        setSaveState("saving");
         setSaveError(null);
+
+        if (!activeNoteId) {
+          const createdId = await createNote({
+            content: next.content,
+            priority: next.priority,
+          });
+
+          setActiveNoteId(createdId);
+          lastSavedRef.current = next;
+          latestDraftRef.current = next;
+          isDirtyRef.current = false;
+          setLastSavedAt(Date.now());
+
+          return true;
+        }
+
         await updateNote({
-          noteId,
+          noteId: activeNoteId,
           content: next.content,
           priority: next.priority,
         });
 
         lastSavedRef.current = next;
+        latestDraftRef.current = next;
         isDirtyRef.current = false;
-        setSaveState("saved");
+        setLastSavedAt(Date.now());
+
         return true;
       } catch (caughtError) {
-        setSaveState("error");
         setSaveError(caughtError instanceof Error ? caughtError.message : "Could not auto-save note.");
         return false;
       }
     },
-    [noteId, updateNote],
+    [activeNoteId, createNote, updateNote],
   );
 
   React.useEffect(() => {
@@ -136,14 +184,10 @@ export function NoteDetailScreen({ noteId }: NoteDetailScreenProps) {
         return;
       }
 
-      event.preventDefault();
-
-      void (async () => {
-        isFlushingRef.current = true;
-        await saveDraft(latestDraftRef.current);
+      isFlushingRef.current = true;
+      void saveDraft(latestDraftRef.current).finally(() => {
         isFlushingRef.current = false;
-        navigation.dispatch(event.data.action);
-      })();
+      });
     });
 
     return unsubscribe;
@@ -151,106 +195,113 @@ export function NoteDetailScreen({ noteId }: NoteDetailScreenProps) {
 
   React.useLayoutEffect(() => {
     navigation.setOptions({
-      title: "Note",
+      title: isNewNote ? "New Note" : "Note",
+      headerLargeTitle: false,
+      headerStyle: {
+        backgroundColor: "#f4f4f6",
+      },
+      headerShadowVisible: false,
+      contentStyle: {
+        backgroundColor: "#f4f4f6",
+      },
       headerRight: () => (
         <PriorityMenu disabled={!hasInitialized} value={priority} onChange={(next) => setPriority(next)} />
       ),
     });
-  }, [hasInitialized, navigation, priority]);
+  }, [hasInitialized, isNewNote, navigation, priority]);
 
-  const saveMessage =
-    saveState === "saving"
-      ? "Saving..."
-      : saveState === "saved"
-        ? "Saved"
-        : saveState === "error"
-          ? saveError ?? "Could not auto-save note."
-          : "Changes save automatically.";
-
-  if (note === undefined && !hasInitialized) {
+  if (!isNewNote && note === undefined && !hasInitialized) {
     return (
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{ padding: 16, gap: 12 }}
+        style={{ flex: 1, backgroundColor: "#f4f4f6" }}
+        contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 18 }}
       >
-        <Card>
-          <Text selectable style={{ color: "#64748b", lineHeight: 20 }}>
-            Loading note...
-          </Text>
-        </Card>
+        <Text selectable style={{ color: "#6b7280" }}>
+          Loading note...
+        </Text>
       </ScrollView>
     );
   }
 
-  if (note === null && !hasInitialized) {
+  if (!isNewNote && note === null && !hasInitialized) {
     return (
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{ padding: 16, gap: 12 }}
+        style={{ flex: 1, backgroundColor: "#f4f4f6" }}
+        contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 18, gap: 8 }}
       >
-        <Card>
-          <Text selectable style={{ color: "#0f172a", fontWeight: "700", fontSize: 18 }}>
-            Note not found
-          </Text>
-          <Text selectable style={{ color: "#64748b", lineHeight: 20 }}>
-            This note may have been deleted.
-          </Text>
-        </Card>
+        <Text selectable style={{ color: "#111827", fontSize: 20, fontWeight: "700" }}>
+          Note not found
+        </Text>
+        <Text selectable style={{ color: "#6b7280" }}>
+          This note may have been deleted.
+        </Text>
       </ScrollView>
     );
   }
+
+  const dateLabel = formatNoteDate(lastSavedAt ?? initialTimestamp.current);
 
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 36 }}
+      style={{ flex: 1, backgroundColor: "#f4f4f6" }}
+      keyboardDismissMode="interactive"
+      contentContainerStyle={{
+        flexGrow: 1,
+        paddingHorizontal: 20,
+        paddingTop: 16,
+        paddingBottom: 28,
+      }}
     >
-      <Card>
-        <TextInput
-          multiline
-          autoFocus
-          value={content}
-          onChangeText={setContent}
-          placeholder="Write your note"
-          style={{
-            minHeight: 220,
-            borderRadius: 14,
-            borderCurve: "continuous",
-            borderWidth: 1,
-            borderColor: "#cbd5e1",
-            padding: 12,
-            fontSize: 17,
-            color: "#0f172a",
-            lineHeight: 24,
-            textAlignVertical: "top",
-            backgroundColor: "#ffffff",
-          }}
-        />
+      <Text
+        selectable
+        style={{
+          alignSelf: "center",
+          color: "#8b8f97",
+          fontSize: 18,
+          marginBottom: 12,
+          fontVariant: ["tabular-nums"],
+        }}
+      >
+        {dateLabel}
+      </Text>
 
+      {saveError ? (
         <View
           style={{
-            borderRadius: 12,
+            borderRadius: 10,
             borderCurve: "continuous",
-            paddingHorizontal: 10,
+            paddingHorizontal: 12,
             paddingVertical: 8,
-            backgroundColor: saveState === "error" ? "#fef2f2" : "#f1f5f9",
+            backgroundColor: "#fef2f2",
+            marginBottom: 10,
           }}
         >
-          <Text
-            selectable
-            style={{
-              color: saveState === "error" ? "#b91c1c" : "#334155",
-              fontWeight: "600",
-            }}
-          >
-            {saveMessage}
+          <Text selectable style={{ color: "#b91c1c" }}>
+            {saveError}
           </Text>
         </View>
+      ) : null}
 
-        <Text selectable style={{ color: "#64748b", fontSize: 13 }}>
-          Priority: {priority}
-        </Text>
-      </Card>
+      <TextInput
+        multiline
+        autoFocus
+        placeholder="Start writing"
+        placeholderTextColor="#a1a1aa"
+        value={content}
+        onChangeText={setContent}
+        style={{
+          flexGrow: 1,
+          minHeight: 260,
+          fontSize: 24,
+          lineHeight: 34,
+          color: "#3f3f46",
+          textAlignVertical: "top",
+          padding: 0,
+        }}
+      />
     </ScrollView>
   );
 }

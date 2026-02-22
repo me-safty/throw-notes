@@ -4,19 +4,11 @@ import { View } from "react-native";
 
 export default function AddTabRoute() {
   const router = useRouter();
-  const returnToHomeOnNextFocusRef = React.useRef(false);
 
   useFocusEffect(
     React.useCallback(() => {
       const timeout = setTimeout(() => {
-        if (returnToHomeOnNextFocusRef.current) {
-          returnToHomeOnNextFocusRef.current = false;
-          router.replace("/(tabs)/(home)");
-          return;
-        }
-
-        returnToHomeOnNextFocusRef.current = true;
-        router.push("/note-modal");
+        router.push("/(tabs)/(home)/notes/new" as never);
       }, 0);
 
       return () => {
